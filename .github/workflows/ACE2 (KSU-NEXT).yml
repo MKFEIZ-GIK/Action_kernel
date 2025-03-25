@@ -1,4 +1,4 @@
-name: Build OnePlus_ace2 (Ksu-next)(去后缀)
+name: Build OnePlus_ace2 (Ksu-next)(可改名)
 on:
   workflow_dispatch:
     inputs:
