@@ -1,4 +1,4 @@
-name: New KernelSU Next SUSFS Ace2
+name: Build OnePlus_ace2 (Ksu-next)(去后缀)
 on:
   workflow_dispatch:
     inputs:
