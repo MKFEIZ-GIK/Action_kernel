@@ -1,4 +1,4 @@
-name: Build OnePlus_ace2
+name: TEST(SukiSU)
 on:
   workflow_dispatch:
     inputs:
