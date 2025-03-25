@@ -1,4 +1,4 @@
-name: New KernelSU Next SUSFS Ace2
+name: TEST(KSU-NEXT)
 on:
   workflow_dispatch:
     inputs:
