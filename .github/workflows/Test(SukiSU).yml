@@ -75,22 +75,27 @@ jobs:
         run: |
          git config --global user.name "ychenxuan"
          git config --global user.email "3494167979@qq.com"
+
       - name: Install dependencies
         run: |
          sudo apt update && sudo apt upgrade -y
          sudo apt install -y python3 git curl
+
       - name: Install repo tool
         run: |
          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
          chmod a+x ~/repo
          sudo mv ~/repo /usr/local/bin/repo
+
       - name: Initialize repo and sync
         run: |
-          mkdir kernel_workspace && cd kernel_workspace
-          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
-          repo sync
-          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
-          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
+         mkdir kernel_workspace && cd kernel_workspace
+         repo init -u https://github.com/OnePlusOSS/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
+         repo sync
+         rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
+         rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
+         sed -i 's/ -dirty//g' kernel_platform/common/scripts/setlocalversion
+         sed -i 's/ -dirty//g' kernel_platform/msm-kernel/scripts/setlocalversion
       
       - name: KernelSU & SukiSU version
         if: ${{ github.event.inputs.kernelsu_variant == 'Official' || github.event.inputs.kernelsu_variant == 'SukiSU' }}
@@ -118,11 +123,12 @@ jobs:
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
           git clone https://github.com/ShirkNeko/SukiSU_patch.git
           cd kernel_platform
+
           # Copy SUSFS patches
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
           cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-          cp -r ../SukiSU_patch/其他/lz4k/include/linux/* ./common/include/linux
+          cp -r ../SukiSU_patch/other/lz4k/include/linux/* ./common/include/linux
           cp -r ../SukiSU_patch/other/lz4k/lib/* ./common/lib
           cp -r ../SukiSU_patch/other/lz4k/crypto/* ./common/crypto
           
@@ -147,11 +153,13 @@ jobs:
           echo "正在打vfs补丁"
           patch -p1 -F 3 < new_hooks.patch
           echo "完成"
+
       - name: Add SUSFS Configuration Settings
         run: |
           cd kernel_workspace/kernel_platform
           # Add KSU configuration settings
           echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
+
           # Add VFS configuration settings
           if [[ "${{ github.event.inputs.VFS_patch_ENABLED }}" == 'enable' ]]; then
             echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ./common/arch/arm64/configs/gki_defconfig
@@ -186,33 +194,16 @@ jobs:
           echo "obj-y += lz4kd/" >> ./common/lib/Makefile
           echo "obj-y += lz4k.o" >> ./common/crypto/Makefile
           echo "obj-y += lz4kd.o" >> ./common/crypto/Makefile
+
           # Remove check_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
-      - name: Force remove -dirty suffix
-        run: |
-          cd kernel_workspace/kernel_platform
-          sed -i 's/ -dirty//g' common/scripts/setlocalversion
-          sed -i 's/ -dirty//g' msm-kernel/scripts/setlocalversion
-          sed -i 's/ -dirty//g' external/dtc/scripts/setlocalversion
-          sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' common/scripts/setlocalversion
-          git add -A
-          git commit -m "Force remove -dirty suffix from kernel version"
-          
+
       - name: Add make name
         run: |
-          cd kernel_workspace/kernel_platform
-          sed -i '$s|echo "\$res"|echo "${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
-          if [[ "${{ github.event.inputs.CPU }}" == "sm8650" ]]; then
-            sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
-          else
-            echo "skip: 旧版内核无需修改 stamp.bzl"
-          fi
-      - name: Clean legacy build artifacts (旧版内核专用)
-        if: github.event.inputs.CPU != 'sm8650'  # 仅旧版内核需要清理
-        run: |
-          cd kernel_workspace/kernel_platform
-          # 清理旧版构建残留文件（如 out/ .out/）
-          rm -rf out/ .out/ || echo "无需清理"
+         cd kernel_workspace/kernel_platform
+         sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
+         sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
+  
       - name: Build kernel
         if: github.event.inputs.CPU == 'sm8650' 
         run: |
@@ -227,24 +218,10 @@ jobs:
          
       - name: Make AnyKernel3
         run: |
-          git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1
-          rm -rf ./AnyKernel3/.git
-          # 动态路径生成
-          if [[ "${{ github.event.inputs.CPU }}" == "sm8650" ]]; then
-            IMAGE_PATH="kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-gki/dist/Image"
-          else
-            IMAGE_PATH="kernel_workspace/kernel_platform/out/msm-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.CPUD }}-gki/dist/Image"
-          fi
-          # 检查文件是否存在
-          if [ -f "$IMAGE_PATH" ]; then
-            cp "$IMAGE_PATH" ./AnyKernel3/
-            cp "$IMAGE_PATH" ./kernel_workspace/kernel
-          else
-            echo "错误：内核镜像文件未生成！可能原因："
-            echo "1. 构建失败，请检查日志。"
-            echo "2. 路径错误：$IMAGE_PATH"
-            exit 1
-          fi
+         git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1
+         rm -rf ./AnyKernel3/.git
+         cp kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-gki/dist/Image ./AnyKernel3/
+         cp kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-gki/dist/Image ./kernel_workspace/kernel
          
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
