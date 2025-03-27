@@ -22,10 +22,6 @@ on:
         description: "内核版本"
         required: true
         default: '5.10'
-      KERNEL_NAME:
-        description: "修改内核名称"
-        required: true
-        default: '-android12-9-o-g0a04ff961c85-MKFEIZ'
       kernelsu_variant:
         description: "选择 KSU"
         required: true
@@ -207,22 +203,6 @@ jobs:
           sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' common/scripts/setlocalversion
           git add -A
           git commit -m "Force remove -dirty suffix from kernel version"
-          
-      - name: Add make name
-        run: |
-          cd kernel_workspace/kernel_platform
-          sed -i '$s|echo "\$res"|echo "${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
-          if [[ "${{ github.event.inputs.CPU }}" == "sm8650" ]]; then
-            sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
-          else
-            echo "skip: 旧版内核无需修改 stamp.bzl"
-          fi
-      - name: Clean legacy build artifacts (旧版内核专用)
-        if: github.event.inputs.CPU != 'sm8650'  # 仅旧版内核需要清理
-        run: |
-          cd kernel_workspace/kernel_platform
-          # 清理旧版构建残留文件（如 out/ .out/）
-          rm -rf out/ .out/ || echo "无需清理"
       - name: Build kernel
         if: github.event.inputs.CPU == 'sm8650' 
         run: |
