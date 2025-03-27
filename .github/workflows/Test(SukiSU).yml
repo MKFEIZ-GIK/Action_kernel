@@ -198,12 +198,21 @@ jobs:
           # Remove check_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
 
-      - name: Add make name
+      - name: Force remove -dirty suffix
         run: |
-         cd kernel_workspace/kernel_platform
-         sed -i '$s|echo "\$res"|echo "\${{ github.event.inputs.KERNEL_NAME }}"|' ./common/scripts/setlocalversion
-         sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
-  
+          cd kernel_workspace/kernel_platform
+          sed -i 's/ -dirty//g' common/scripts/setlocalversion
+          sed -i 's/ -dirty//g' msm-kernel/scripts/setlocalversion
+          sed -i 's/ -dirty//g' external/dtc/scripts/setlocalversion
+          sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' common/scripts/setlocalversion
+          git add -A
+          git commit -m "Force remove -dirty suffix from kernel version"
+      - name: Clean legacy build artifacts (旧版内核专用)
+        if: github.event.inputs.CPU != 'sm8650'  # 仅旧版内核需要清理
+        run: |
+          cd kernel_workspace/kernel_platform
+          # 清理旧版构建残留文件（如 out/ .out/）
+          rm -rf out/ .out/ || echo "无需清理"
       - name: Build kernel
         if: github.event.inputs.CPU == 'sm8650' 
         run: |
@@ -218,10 +227,24 @@ jobs:
          
       - name: Make AnyKernel3
         run: |
-         git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1
-         rm -rf ./AnyKernel3/.git
-         cp kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-gki/dist/Image ./AnyKernel3/
-         cp kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-gki/dist/Image ./kernel_workspace/kernel
+          git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1
+          rm -rf ./AnyKernel3/.git
+          # 动态路径生成
+          if [[ "${{ github.event.inputs.CPU }}" == "sm8650" ]]; then
+            IMAGE_PATH="kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-gki/dist/Image"
+          else
+            IMAGE_PATH="kernel_workspace/kernel_platform/out/msm-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.CPUD }}-gki/dist/Image"
+          fi
+          # 检查文件是否存在
+          if [ -f "$IMAGE_PATH" ]; then
+            cp "$IMAGE_PATH" ./AnyKernel3/
+            cp "$IMAGE_PATH" ./kernel_workspace/kernel
+          else
+            echo "错误：内核镜像文件未生成！可能原因："
+            echo "1. 构建失败，请检查日志。"
+            echo "2. 路径错误：$IMAGE_PATH"
+            exit 1
+          fi
          
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
